@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>City Transit Pass</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; display: flex; justify-content: center; padding: 20px; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h2 { text-align: center; color: #2c3e50; }
+        input, select, button { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        button { background-color: #3498db; color: white; font-weight: bold; border: none; cursor: pointer; transition: 0.3s; }
+        button:hover { background-color: #2980b9; }
+        .hidden { display: none; }
+        .alert { padding: 10px; background-color: #e74c3c; color: white; border-radius: 5px; margin-bottom: 10px; text-align: center; }
+        .success { background-color: #2ecc71; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🚆 Transit Pass System</h2>
+    <div id="messageBox" class="hidden"></div>
+
+    <div id="loginSection">
+        <h3>Login</h3>
+        <input type="text" id="mobile" placeholder="Mobile Number (e.g., 1111111111)">
+        <input type="password" id="password" placeholder="Password (e.g., password123)">
+        <button onclick="login()">Login</button>
+    </div>
+
+    <div id="dashboardSection" class="hidden">
+        <h3 id="welcomeText">Welcome!</h3>
+        <p><strong>Role:</strong> <span id="userRole"></span></p>
+        
+        <hr>
+
+        <div id="commuterTools" class="hidden">
+            <h4>Buy a Pass</h4>
+            <select id="passSelect">
+                <option value="1">Daily Bus Pass (₹50)</option>
+                <option value="2">Daily Metro+Bus Pass (₹150)</option>
+            </select>
+            <button onclick="buyPass()">Purchase Pass</button>
+            <p id="myPassCode" style="font-weight: bold; color: #d35400; text-align: center;"></p>
+        </div>
+
+        <div id="validatorTools" class="hidden">
+            <h4>Validate a Pass</h4>
+            <input type="text" id="scanPassCode" placeholder="Enter PASS-XXXX Code">
+            <select id="transportMode">
+                <option value="METRO">Metro Station Gate</option>
+                <option value="BUS">Bus Scanner</option>
+            </select>
+            <button onclick="validatePass()" style="background-color: #e67e22;">Scan Pass</button>
+        </div>
+
+        <button onclick="logout()" style="background-color: #7f8c8d; margin-top: 20px;">Logout</button>
+    </div>
+</div>
+
+<script>
+    const API_URL = "http://127.0.0.1:8000/api";
+    let currentUser = null;
+
+    function showMessage(msg, isSuccess = false) {
+        const box = document.getElementById('messageBox');
+        box.textContent = msg;
+        box.className = isSuccess ? 'alert success' : 'alert';
+        setTimeout(() => box.className = 'hidden', 3000);
+    }
+
+    async function login() {
+        const mobile = document.getElementById('mobile').value;
+        const password = document.getElementById('password').value;
+
+        try {
+            const res = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mobile, password })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                currentUser = data.user;
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('dashboardSection').classList.remove('hidden');
+                document.getElementById('welcomeText').textContent = `Welcome, ${currentUser.name}!`;
+                document.getElementById('userRole').textContent = currentUser.role;
+
+                if (currentUser.role === 'Commuter') {
+                    document.getElementById('commuterTools').classList.remove('hidden');
+                } else if (currentUser.role === 'Validator') {
+                    document.getElementById('validatorTools').classList.remove('hidden');
+                }
+                showMessage("Login Successful!", true);
+            } else {
+                showMessage(data.detail);
+            }
+        } catch (err) {
+            showMessage("Failed to connect to the server. Is it running?");
+        }
+    }
+
+    async function buyPass() {
+        const passTypeId = document.getElementById('passSelect').value;
+        try {
+            const res = await fetch(`${API_URL}/passes/purchase`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.id, pass_type_id: parseInt(passTypeId) })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showMessage("Pass Purchased!", true);
+                document.getElementById('myPassCode').textContent = `Your Code: ${data.pass.pass_code}`;
+            }
+        } catch (err) { showMessage("Purchase failed."); }
+    }
+
+    async function validatePass() {
+        const passCode = document.getElementById('scanPassCode').value;
+        const mode = document.getElementById('transportMode').value;
+        try {
+            const res = await fetch(`${API_URL}/validate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pass_code: passCode, transport_mode: mode, validator_id: currentUser.id })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showMessage("✅ VALID PASS!", true);
+            } else {
+                showMessage(`❌ INVALID: ${data.detail}`);
+            }
+        } catch (err) { showMessage("Validation error."); }
+    }
+
+    function logout() {
+        currentUser = null;
+        document.getElementById('loginSection').classList.remove('hidden');
+        document.getElementById('dashboardSection').classList.add('hidden');
+        document.getElementById('commuterTools').classList.add('hidden');
+        document.getElementById('validatorTools').classList.add('hidden');
+        document.getElementById('myPassCode').textContent = '';
+        document.getElementById('mobile').value = '';
+        document.getElementById('password').value = '';
+    }
+</script>
+
+</body>
+</html>
