@@ -8,11 +8,23 @@ import uuid
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from typing import Optional
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables securely
 load_dotenv()
 
 app = FastAPI(title="City Transit Pass System", description="Amnex MaaS Backend")
+
+
+# --- CORS Configuration ---
+# This allows your frontend to connect to the API without browser security blocks
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (perfect for local hackathon testing)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 
 # --- Database Connection ---
 def get_db():
