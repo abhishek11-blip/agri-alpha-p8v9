@@ -7,6 +7,7 @@ import os
 import uuid
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+from typing import Optional
 
 # Load environment variables securely
 load_dotenv()
@@ -162,3 +163,69 @@ def validate_pass(request: ValidationRequest, db=Depends(get_db)):
     cursor.close()
     
     return {"status": "success", "message": "Valid"}
+
+from typing import Optional
+
+# --- 4. History and Admin Endpoints ---
+
+@app.get("/api/trips/history", summary="Get trip history for a commuter")
+def get_trip_history(user_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None, db=Depends(get_db)):
+    """
+    Fetch history showing date, time, transport mode, and route[cite: 47].
+    Includes optional date range filtering[cite: 48].
+    """
+    cursor = db.cursor(cursor_factory=RealDictCursor)
+    
+    query = """
+        SELECT t.transport_mode, t.route_info, t.validated_at, up.pass_code 
+        FROM trips t
+        JOIN user_passes up ON t.user_pass_id = up.id
+        WHERE up.user_id = %s
+    """
+    params = [user_id]
+    
+    # Filter by date range if provided [cite: 48]
+    if start_date and end_date:
+        query += " AND DATE(t.validated_at) BETWEEN %s AND %s"
+        params.extend([start_date, end_date])
+        
+    query += " ORDER BY t.validated_at DESC"
+    
+    cursor.execute(query, tuple(params))
+    history = cursor.fetchall()
+    cursor.close()
+    
+    return {"history": history}
+
+@app.get("/api/admin/dashboard", summary="Admin statistics")
+def get_admin_dashboard(db=Depends(get_db)):
+    """
+    Shows total passes sold (daily/weekly/monthly) and validations per mode[cite: 50, 51].
+    """
+    cursor = db.cursor(cursor_factory=RealDictCursor)
+    
+    # Total passes sold (daily/weekly/monthly) [cite: 50]
+    cursor.execute("""
+        SELECT 
+            COUNT(*) FILTER (WHERE purchase_date >= CURRENT_DATE) as daily_passes,
+            COUNT(*) FILTER (WHERE purchase_date >= CURRENT_DATE - INTERVAL '7 days') as weekly_passes,
+            COUNT(*) FILTER (WHERE purchase_date >= CURRENT_DATE - INTERVAL '30 days') as monthly_passes
+        FROM user_passes
+    """)
+    passes_sold = cursor.fetchone()
+    
+    # Total validations per transport mode [cite: 51]
+    cursor.execute("""
+        SELECT transport_mode, COUNT(*) as total_validations
+        FROM trips
+        GROUP BY transport_mode
+    """)
+    validations_by_mode = cursor.fetchall()
+    
+    cursor.close()
+    
+    return {
+        "passes_sold": passes_sold,
+        "validations_by_mode": validations_by_mode
+    }
+    
